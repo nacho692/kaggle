@@ -44,6 +44,81 @@ def PCA_preprocess(X):
     }
     return data
 
+def preprocess_eyesight(df):
+
+    cols = ['eyesight(left)', 'eyesight(right)']
+    df.loc[:, 'best_eyesight_is_left'] = False
+    df.loc[:, 'best_eyesight_is_right'] = False
+
+    df.loc[df['eyesight(left)'] > df['eyesight(right)'], 'best_eyesight_is_left'] = True
+    df.loc[df['eyesight(left)'] < df['eyesight(right)'], 'best_eyesight_is_right'] = True
+    # values = df[cols].values.flatten()
+    # thermos = generate_thermos(values)
+    # for key, value in thermos:
+    #     df.loc[:, f'eyesight(left)_{key}'] = False
+    #     df.loc[:, f'eyesight(right)_{key}'] = False
+    #     df.loc[df['eyesight(left)'] >= value, f'eyesight(left)_{key}'] = True
+    #     df.loc[df['eyesight(right)'] >= value, f'eyesight(right)_{key}'] = True
+
+    df.drop(cols, axis=1, inplace=True)
+    df.fillna(True, inplace=True)
+
+    data = {'df': df}
+    return data
+
+def preprocess_hearing(df):
+
+    df.loc[:, 'best_hearing_is_left'] = df['hearing(left)'] > df['hearing(right)']
+    df.loc[:, 'best_hearing_is_right'] = df['hearing(left)'] < df['hearing(right)']
+    df.loc[:, 'hearing(left)'] = df.loc[:, 'hearing(left)'] - 1
+    df.loc[:, 'hearing(right)'] = df.loc[:, 'hearing(right)'] - 1
+
+    data = {'df':df}
+
+    return data
+
+def preprocess_thermos(df, thermos_columns=None):
+    if thermos_columns is None:
+        thermos_columns = ['weight(kg)', 'waist(cm)', 'systolic', 'age', 'height(cm)',
+        'relaxation', 'fasting blood sugar', 'Cholesterol', 'triglyceride',
+        'HDL', 'LDL', 'hemoglobin', 'serum creatinine', 'AST', 'ALT', 'Gtp']
+    for col in thermos_columns:
+        values = df[col].values.flatten()
+        thermos = generate_thermos(values)
+        for key, value in thermos:
+            df.loc[:, f'{col}_{key}'] = False
+            df.loc[df[col] >= value, f'{col}_{key}'] = True
+    df.drop(thermos_columns, axis=1, inplace=True)
+
+    data = {
+        'df':df
+    }
+    return data
+
+def preprocess_one_hot(df, one_hot_columns=None):
+    if one_hot_columns is None:
+        one_hot_columns = ['Urine protein']
+    for col in one_hot_columns:
+        values = df[col].unique()
+        thermos = generate_one_hot(values)
+        for key, value in thermos:
+            df.loc[:, f'{col}_{key}'] = df[col] == value
+    df.drop(one_hot_columns, axis=1, inplace=True)
+    data = {
+        'df':df
+    }
+    return data
+def generate_thermos(values):
+    percentiles = set(np.percentile(values, [i for i in range(0,100, 10)]))
+    percentiles = [a for a in enumerate(percentiles)]
+
+    percentiles.sort(key=lambda x: x[1])
+    return percentiles
+
+def generate_one_hot(values):
+    one_hot_values = set(values)
+    one_hot_values = [a for a in enumerate(one_hot_values)]
+    return one_hot_values
 def preprocess(df, preprocessing_functions):
     input_data = {'df': df}
 
@@ -53,7 +128,7 @@ def preprocess(df, preprocessing_functions):
         res = f(**sub_input)
         input_data.update(res)
 
-    return input_data['X'], input_data['y']
+    return input_data['X'], input_data['y'], input_data['columns']
 
 def get_MLPClassifier_for_grid_search():
     alphas = [0.1, 0.15, 0.25]
@@ -63,7 +138,15 @@ def get_MLPClassifier_for_grid_search():
     clf = MLPClassifier()
     return 'MLPC', clf, parameters
 
-
+def get_keras_MLPClassifier_for_grid_search():
+    clf = KerasClassifier(
+        model=get_clf_model,
+        hidden_layer_sizes=(100,),
+        optimizer="adam",
+        optimizer__learning_rate=0.001,
+        epochs=50,
+        verbose=0,
+    )
 def print_grid_search_results(results):
     params_with_values = [(p, m, s) for p, m, s in
                           zip(results['params'], results['mean_test_AUC'], results['std_test_AUC'])]
@@ -94,19 +177,27 @@ def get_shapley_values(classifier, X, y, columns, amount_of_samples=400):
 
 if __name__=='__main__':
     df = pd.read_csv('../../data/smoking/train.csv')
-
+    for col in df.columns:
+        if col not in ('id', 'smoking'):
+            print(col)
+            print(df[col].nunique())
+            print('='*4)
 
     preprocessing_functions = [
+        preprocess_eyesight,
+        preprocess_hearing,
+        #preprocess_thermos,
+        #preprocess_one_hot,
         get_input_output,
         scaler_preprocess
     ]
-    X, y = preprocess(df, preprocessing_functions)
-
+    X, y, cols = preprocess(df, preprocessing_functions)
+    pdb.set_trace()
     classifiers_to_explore = [
         get_MLPClassifier_for_grid_search()
     ]
     for name, clf, parameters in classifiers_to_explore:
-        gs = GridSearchCV(clf, parameters, n_jobs=2, scoring={"AUC":"roc_auc"}, refit="AUC", verbose=3)
+        gs = GridSearchCV(clf, parameters, n_jobs=1, scoring={"AUC":"roc_auc"}, refit="AUC", verbose=3)
 
         gs.fit(X, y)
         results = gs.cv_results_
