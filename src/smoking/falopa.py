@@ -8,7 +8,46 @@ import numpy as np
 import shap
 import matplotlib.pyplot as plt
 import inspect
+from scikeras.wrappers import KerasClassifier
+from tensorflow.python.keras.models import Sequential
+from tensorflow.python.keras.layers import InputLayer, Dense
+from tensorflow.python.keras import regularizers, callbacks
+from itertools import combinations
 
+def get_keras_model(type, cols):
+    if type == 'estandar':
+        return estandar(cols)
+    elif type == 'deep':
+        return deep(cols)
+def estandar(cols):
+    # create model
+    model = Sequential()
+    model.add(InputLayer((cols,)))
+    model.add(Dense(300, activation='relu', kernel_regularizer=regularizers.L1L2(l1=1e-5, l2=1e-4)))
+    model.add(Dense(30, activation='relu', kernel_regularizer=regularizers.L1L2(l1=1e-5, l2=1e-4)))
+    model.add(Dense(1, activation='sigmoid'))
+    # Compile model
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+
+def deep(cols):
+    # create model
+    model = Sequential()
+    model.add(InputLayer((cols,)))
+    model.add(Dense(30, activation='relu', kernel_regularizer=regularizers.L1L2(l1=1e-5, l2=1e-4)))
+    model.add(Dense(30, activation='relu', kernel_regularizer=regularizers.L1L2(l1=1e-5, l2=1e-4)))
+    model.add(Dense(30, activation='relu', kernel_regularizer=regularizers.L1L2(l1=1e-5, l2=1e-4)))
+    model.add(Dense(30, activation='relu', kernel_regularizer=regularizers.L1L2(l1=1e-5, l2=1e-4)))
+    model.add(Dense(1, activation='sigmoid'))
+    # Compile model
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+
+
+def get_KerasClassifier_for_grid_search(cols):
+    es = callbacks.EarlyStopping()
+    clf = KerasClassifier(verbose=3, callbacks=[es])
+    return "Keras", clf, {'model':[deep(cols), estandar(cols)], 'epochs': [5], 'batch_size': [100]}
 
 def get_input_output(df, input_cols=None, output_cols=None, remove_cols=None):
     if remove_cols is None:
@@ -77,6 +116,21 @@ def preprocess_hearing(df):
 
     return data
 
+def compute_pairwise_coefficients(df, columns_to_take_into_consideration=None):
+    if columns_to_take_into_consideration is None:
+        columns_to_take_into_consideration = ['weight(kg)', 'waist(cm)', 'systolic', 'age', 'height(cm)',
+        'relaxation', 'fasting blood sugar', 'Cholesterol', 'triglyceride',
+        'HDL', 'LDL', 'hemoglobin', 'serum creatinine', 'AST', 'ALT', 'Gtp']
+    extra_columns = []
+    for col_1, col_2 in combinations(columns_to_take_into_consideration, 2):
+        column_key = f"{col_1}_{col_2}"
+        df[column_key] = df[col_1] / df[col_2]
+        extra_columns.append(column_key)
+    data = {
+        'df':df,
+        'thermos_columns': columns_to_take_into_consideration+extra_columns
+    }
+    return data
 def preprocess_thermos(df, thermos_columns=None):
     if thermos_columns is None:
         thermos_columns = ['weight(kg)', 'waist(cm)', 'systolic', 'age', 'height(cm)',
@@ -138,15 +192,10 @@ def get_MLPClassifier_for_grid_search():
     clf = MLPClassifier()
     return 'MLPC', clf, parameters
 
-def get_keras_MLPClassifier_for_grid_search():
-    clf = KerasClassifier(
-        model=get_clf_model,
-        hidden_layer_sizes=(100,),
-        optimizer="adam",
-        optimizer__learning_rate=0.001,
-        epochs=50,
-        verbose=0,
-    )
+def get_KerasClassifier_for_grid_search(cols):
+    es = callbacks.EarlyStopping(monitor="loss")
+    clf = KerasClassifier(verbose=3, callbacks=[es])
+    return "Keras", clf, {'epochs': [25, 50], 'batch_size': [32], 'model': [lambda : get_keras_model('deep', cols), lambda: get_keras_model('estandar',cols)]}
 def print_grid_search_results(results):
     params_with_values = [(p, m, s) for p, m, s in
                           zip(results['params'], results['mean_test_AUC'], results['std_test_AUC'])]
@@ -184,20 +233,22 @@ if __name__=='__main__':
             print('='*4)
 
     preprocessing_functions = [
+        compute_pairwise_coefficients,
         preprocess_eyesight,
         preprocess_hearing,
-        #preprocess_thermos,
-        #preprocess_one_hot,
+        preprocess_thermos,
+        preprocess_one_hot,
         get_input_output,
         scaler_preprocess
     ]
     X, y, cols = preprocess(df, preprocessing_functions)
     pdb.set_trace()
     classifiers_to_explore = [
-        get_MLPClassifier_for_grid_search()
+        #get_MLPClassifier_for_grid_search()
+        get_KerasClassifier_for_grid_search(len(cols))
     ]
     for name, clf, parameters in classifiers_to_explore:
-        gs = GridSearchCV(clf, parameters, n_jobs=1, scoring={"AUC":"roc_auc"}, refit="AUC", verbose=3)
+        gs = GridSearchCV(clf, parameters, n_jobs=1, scoring={"AUC":"roc_auc"}, refit="AUC", verbose=3,  return_train_score=True)
 
         gs.fit(X, y)
         results = gs.cv_results_
