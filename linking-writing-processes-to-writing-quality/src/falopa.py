@@ -143,6 +143,7 @@ def generate_one_hot(values):
     one_hot_values = set(values)
     one_hot_values = [a for a in enumerate(one_hot_values)]
     return one_hot_values
+
 def preprocess(df, preprocessing_functions):
     input_data = {'df': df}
 
@@ -181,10 +182,7 @@ def get_AdaBoostRegressor_for_grid_search():
     clf = AdaBoostRegressor()
     return 'AdaBoost', clf, parameters
 
-def get_KerasClassifier_for_grid_search(cols):
-    es = callbacks.EarlyStopping(monitor="loss")
-    clf = KerasClassifier(verbose=3, callbacks=[es])
-    return "Keras", clf, {'epochs': [25, 50], 'batch_size': [32], 'model': [lambda : get_keras_model('deep', cols), lambda: get_keras_model('estandar',cols)]}
+
 def print_grid_search_results(gs):
     results = gs.cv_results_
 
@@ -216,6 +214,7 @@ def get_shapley_values(classifier, X, y, columns, amount_of_samples=400):
   #  plt.plot()
 
 if __name__=='__main__':
+    from joblib import dump
     df = pd.read_csv('../data/summarize.csv')
 
     preprocessing_functions = [
@@ -240,3 +239,5 @@ if __name__=='__main__':
         gs.fit(X, y)
         print(name)
         print_grid_search_results(gs)
+
+        dump(gs.best_estimator_, f'../model_weights/{name}.joblib')
