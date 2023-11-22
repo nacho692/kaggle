@@ -7,7 +7,7 @@ from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor
 from sklearn.metrics import mean_squared_error
 import numpy as np
-import shap
+#import shap
 import matplotlib.pyplot as plt
 import inspect
 from scikeras.wrappers import KerasClassifier
@@ -206,14 +206,14 @@ def get_shapley_values(classifier, X, y, columns, amount_of_samples=400):
     false_positives = [i for i in range(len(y)) if y[i] != y_pred[i] and y[i] == 0]
     false_negatives = [i for i in range(len(y)) if y[i] != y_pred[i] and y[i] == 1]
 
-    explainer = shap.Explainer(clf.predict, X_samples, feature_names=columns)
-    shap_values_positives = explainer(X[false_positives])
-    shap_values_negatives = explainer(X[false_negatives])
+ #   explainer = shap.Explainer(clf.predict, X_samples, feature_names=columns)
+ #   shap_values_positives = explainer(X[false_positives])
+ #   shap_values_negatives = explainer(X[false_negatives])
 
-    shap.plots.beeswarm(shap_values_negatives)
-    plt.plot()
-    shap.plots.beeswarm(shap_values_positives)
-    plt.plot()
+  #  shap.plots.beeswarm(shap_values_negatives)
+  #  plt.plot()
+  #  shap.plots.beeswarm(shap_values_positives)
+  #  plt.plot()
 
 if __name__=='__main__':
     df = pd.read_csv('../data/summarize.csv')
