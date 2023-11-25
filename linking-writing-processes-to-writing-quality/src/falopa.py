@@ -215,7 +215,7 @@ def get_shapley_values(classifier, X, y, columns, amount_of_samples=400):
 
 if __name__=='__main__':
     from joblib import dump
-    df = pd.read_csv('../data/summarize.csv')
+    df = pd.read_csv('../processed/summarize.csv')
 
     preprocessing_functions = [
         get_input_output,
@@ -223,17 +223,16 @@ if __name__=='__main__':
     ]
     X, y, cols = preprocess(df, preprocessing_functions)
 
-
-
-
-
-
     classifiers_to_explore = [
         get_RandomForestRegressor_for_grid_search(),
         get_AdaBoostRegressor_for_grid_search()
     ]
     for name, clf, parameters in classifiers_to_explore:
-        gs = GridSearchCV(clf, parameters,  scoring="neg_root_mean_squared_error",n_jobs=1, verbose=2,  return_train_score=True)
+        gs = GridSearchCV(clf, parameters,
+                          scoring="neg_root_mean_squared_error",
+                          n_jobs=1,
+                          verbose=2,
+                          return_train_score=True)
 
 
         gs.fit(X, y)
